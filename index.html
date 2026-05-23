@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive 3D Rocket Explorer</title>
+    <style>
+        :root {
+            --accent-color: #38bdf8;
+            --bg-glass: rgba(15, 23, 42, 0.85);
+            --border-glass: rgba(56, 189, 248, 0.25);
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+        }
+
+        body,
+        html {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #020617;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            color: var(--text-main);
+        }
+
+        /* 3D Viewport Layer */
+        #canvas-container {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+
+        /* Fail-safe visual backup image layer */
+        #fallback-container {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: radial-gradient(circle at center, #0b1528 0%, #020617 100%);
+            opacity: 0;
+            transition: opacity 0.5s ease;
+            pointer-events: none;
+        }
+
+        #fallback-container img {
+            max-width: 80%;
+            max-height: 70%;
+            object-fit: contain;
+            opacity: 0.15;
+            filter: invert(63%) sepia(88%) saturate(395%) hue-rotate(179deg) brightness(99%) contrast(98%);
+        }
+
+        .fallback-active #fallback-container {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        /* Interactive HTML UI Layer */
+        .ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 24px;
+        }
+
+        header {
+            background: var(--bg-glass);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--border-glass);
+            padding: 16px 24px;
+            border-radius: 12px;
+            max-width: 400px;
+            pointer-events: auto;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            letter-spacing: -0.025em;
+            margin-bottom: 4px;
+            background: linear-gradient(to right, #fff, var(--accent-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        header p {
+            color: var(--text-muted);
+            font-size: 0.875rem;
+        }
+
+        /* Telemetry Control Panel Info Overlay */
+        #info-panel {
+            background: var(--bg-glass);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--border-glass);
+            padding: 24px;
+            border-radius: 16px;
+            width: 100%;
+            max-width: 380px;
+            pointer-events: auto;
+            align-self: flex-end;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .panel-tag {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--accent-color);
+            font-weight: 700;
+            margin-bottom: 6px;
+        }
+
+        #part-title {
+            font-size: 1.35rem;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        #part-description {
+            font-size: 0.95rem;
+            line-height: 1.5;
+            color: var(--text-muted);
+        }
+
+        /* Fallback Interactive Sidebar Navigation List */
+        #fallback-nav {
+            display: none;
+            flex-direction: column;
+            gap: 8px;
+            margin-top: 16px;
+            pointer-events: auto;
+        }
+
+        .fallback-active #fallback-nav {
+            display: flex;
+        }
+
+        .nav-btn {
+            background: rgba(30, 41, 59, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: var(--text-main);
+            padding: 10px 14px;
+            border-radius: 8px;
+            text-align: left;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .nav-btn:hover {
+            background: rgba(56, 189, 248, 0.15);
+            border-color: var(--accent-color);
+        }
+
+        .instructions {
+            position: absolute;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.5);
+            padding: 8px 16px;
+            border-radius: 9999px;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            letter-spacing: 0.05em;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            pointer-events: none;
+            text-align: center;
+        }
+
+        @media (max-width: 640px) {
+            .ui-layer {
+                padding: 16px;
+                flex-direction: column;
+                justify-content: flex-start;
+                gap: 16px;
+            }
+
+            header {
+                max-width: 100%;
+            }
+
+            #info-panel {
+                align-self: center;
+                max-width: 100%;
+                margin-top: auto;
+            }
+
+            .instructions {
+                display: none;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Fallback Graphic Shell if WebGL drops out -->
+    <div id="fallback-container">
+        <img src="https://encrypted-tbn3.gstatic.com/licensed-image?q=tbn:ANd9GcRpd5Xlo4tqx9v1g_cYjjLl7gUMq1YDZpJFM12GojYo_jcMUGdlMfXIqHguQKVnxNDTBGmDWrrQXJRIf0E"
+            alt="Rocket Blueprint Structural Reference View">
+    </div>
+
+    <div id="canvas-container"></div>
+
+    <div class="ui-layer">
+        <header>
+            <h1>Rocket Systems Explorer</h1>
+            <p>Interactive Aerospace Interface</p>
+
+            <!-- Structural manual diagnostic tabs for safe click inputs -->
+            <div id="fallback-nav">
+                <button class="nav-btn" onclick="triggerManualLog(0)">01 // Nose Cone Assembly</button>
+                <button class="nav-btn" onclick="triggerManualLog(1)">02 // Propulsion Core Tank</button>
+                <button class="nav-btn" onclick="triggerManualLog(2)">03 // Solid Booster Strings</button>
+                <button class="nav-btn" onclick="triggerManualLog(3)">04 // Main Control Nozzle</button>
+                <button class="nav-btn" onclick="triggerManualLog(4)">05 // Aerodynamic Stabilizers</button>
+            </div>
+        </header>
+
+        <div class="instructions" id="hint-text">LEFT CLICK + DRAG TO ROTATE | HOVER PARTS TO INSPECT</div>
+
+        <div id="info-panel">
+            <div class="panel-tag" id="part-tag">System Terminal</div>
+            <h2 id="part-title">Telemetry Unit Online</h2>
+            <p id="part-description">Hover or click vehicle parts to fetch architectural layout data.</p>
+        </div>
+    </div>
+
+    <!-- Reliable, stable content delivery frameworks -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+    <script>
+        // --- DATA DICTIONARY SYSTEM ---
+        const systemDatabase = [
+            {
+                tag: "Command Section",
+                name: "Nose Cone Array",
+                description: "Aerodynamic thermal protection shield built from titanium matrix composites. Houses essential flight telemetry, guidance matrices, and stellar navigation tracking arrays."
+            },
+            {
+                tag: "Propulsion Storage",
+                name: "Fuel Tank Core",
+                description: "Cryogenic pressure hulls storing liquid oxygen (LOX) and refined propellant matrix systems. Built with interior anti-slosh baffle architecture to stabilize trajectory inertia profiles."
+            },
+            {
+                tag: "Stage 0 Auxiliary",
+                name: "Solid Rocket Boosters",
+                description: "Strap-on performance booster structures producing substantial mechanical engine lift values. Engineered to release cleanly via staging pyrotechnics once exhaust fields reach zero."
+            },
+            {
+                tag: "Stage 1 Exhaust",
+                name: "Main Engine Nozzle",
+                description: "High-area ratio expansion rocket bell optimizing gas velocities. Features dual-axis gimbal actuators for vector guidance adjustments."
+            },
+            {
+                tag: "Aerodynamics",
+                name: "Stabilization Fins",
+                description: "High-strength structural guide structures providing precise aerodynamic control stability during sound-barrier crossings inside dense atmospheric profiles."
+            }
+        ];
+
+        // --- DOM REFERENCE HOOKS ---
+        const infoPanel = document.getElementById('info-panel');
+        const partTitle = document.getElementById('part-title');
+        const partDescription = document.getElementById('part-description');
+        const partTag = document.getElementById('part-tag');
+        const hintText = document.getElementById('hint-text');
+
+        function updateUIDOM(index) {
+            const data = systemDatabase[index];
+            if (data) {
+                partTag.textContent = data.tag;
+                partTitle.textContent = data.name;
+                partDescription.textContent = data.description;
+            }
+        }
+
+        function triggerManualLog(index) {
+            updateUIDOM(index);
+        }
+
+        // --- 3D RENDER ENGINE PROCESSES ---
+        let scene, camera, renderer, controls, rocketGroup, starField;
+        const interactiveParts = [];
+
+        try {
+            const container = document.getElementById('canvas-container');
+            scene = new THREE.Scene();
+            scene.fog = new THREE.FogExp2(0x020617, 0.02);
+
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 2, 10);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            container.appendChild(renderer.domElement);
+
+            // Controls configuration
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.maxDistance = 20;
+            controls.minDistance = 5;
+            controls.enablePan = false;
+
+            // Direct Lighting Matrices
+            scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+
+            const sunLight = new THREE.DirectionalLight(0xffffff, 1.2);
+            sunLight.position.set(5, 15, 10);
+            scene.add(sunLight);
+
+            const electricBlueLight = new THREE.DirectionalLight(0x38bdf8, 1.5);
+            electricBlueLight.position.set(-8, -2, -5);
+            scene.add(electricBlueLight);
+
+            // Starfield Assembly
+            const starsGeometry = new THREE.BufferGeometry();
+            const starCount = 800;
+            const positions = new Float32Array(starCount * 3);
+            for (let i = 0; i < starCount * 3; i += 3) {
+                positions[i] = (Math.random() - 0.5) * 100;
+                positions[i + 1] = (Math.random() - 0.5) * 100;
+                positions[i + 2] = (Math.random() - 0.5) * 100;
+            }
+            starsGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            const starsMaterial = new THREE.PointsMaterial({ color: 0xffffff, size: 0.25 });
+            starField = new THREE.Points(starsGeometry, starsMaterial);
+            scene.add(starField);
+
+            // Assembly Core Group
+            rocketGroup = new THREE.Group();
+            scene.add(rocketGroup);
+
+            // Material Definitions 
+            const baseHullMat = new THREE.MeshStandardMaterial({ color: 0xeeeeee, roughness: 0.3, metalness: 0.1 });
+            const darkMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.4 });
+            const alertRedMat = new THREE.MeshStandardMaterial({ color: 0xe11d48, roughness: 0.3 });
+            const engineMetalMat = new THREE.MeshStandardMaterial({ color: 0x64748b, metalness: 0.8, roughness: 0.2 });
+
+            // Factory generation function
+            function buildSection(geo, material, dbIndex) {
+                const mesh = new THREE.Mesh(geo, material.clone());
+                mesh.userData = { dbIndex };
+                rocketGroup.add(mesh);
+                interactiveParts.push(mesh);
+            }
+
+            // Nose Cone
+            const noseGeo = new THREE.CylinderGeometry(0, 1.0, 2.2, 32);
+            noseGeo.translate(0, 3.4, 0);
+            buildSection(noseGeo, alertRedMat, 0);
+
+            // Main Fuel Body
+            const tankGeo = new THREE.CylinderGeometry(1.0, 1.0, 3.8, 32);
+            tankGeo.translate(0, 0.4, 0);
+            buildSection(tankGeo, baseHullMat, 1);
+
+            // Boosters Left/Right
+            const boosterGeo = new THREE.CylinderGeometry(0.4, 0.4, 2.8, 16);
+
+            const bLeft = boosterGeo.clone().translate(-1.4, -0.4, 0);
+            buildSection(bLeft, darkMat, 2);
+
+            const bRight = boosterGeo.clone().translate(1.4, -0.4, 0);
+            buildSection(bRight, darkMat, 2);
+
+            // Engine Exit Bell
+            const engineBellGeo = new THREE.CylinderGeometry(0.6, 0.9, 1.0, 24);
+            engineBellGeo.translate(0, -2.0, 0);
+            buildSection(engineBellGeo, engineMetalMat, 3);
+
+            // Fin Wings Stabilizers
+            const wingGeo = new THREE.BoxGeometry(1.0, 1.2, 0.08);
+
+            const finN = wingGeo.clone().translate(0, -1.5, 1.2);
+            buildSection(finN, alertRedMat, 4);
+
+            const finS = wingGeo.clone().translate(0, -1.5, -1.2);
+            buildSection(finS, alertRedMat, 4);
+
+            // Raycaster Systems Setup
+            const raycaster = new THREE.Raycaster();
+            const mouse = new THREE.Vector2();
+            let lastInspectedID = null;
+
+            window.addEventListener('mousemove', (e) => {
+                mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+                mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+            });
+
+            function executeRaycastDetection() {
+                raycaster.setFromCamera(mouse, camera);
+                const hits = raycaster.intersectObjects(interactiveParts);
+
+                if (hits.length > 0) {
+                    const activeMesh = hits[0].object;
+                    if (lastInspectedID !== activeMesh.id) {
+                        if (lastInspectedID) {
+                            const oldMesh = interactiveParts.find(p => p.id === lastInspectedID);
+                            if (oldMesh) oldMesh.material.emissive.setHex(0x000000);
+                        }
+                        lastInspectedID = activeMesh.id;
+                        activeMesh.material.emissive.setHex(0x0a2540); // Soft cyan interactive highlight glow
+                        updateUIDOM(activeMesh.userData.dbIndex);
+                    }
+                } else {
+                    if (lastInspectedID) {
+                        const oldMesh = interactiveParts.find(p => p.id === lastInspectedID);
+                        if (oldMesh) oldMesh.material.emissive.setHex(0x000000);
+                        lastInspectedID = null;
+                    }
+                }
+            }
+
+            // Animation Loop Run Cycles
+            const clock = new THREE.Clock();
+            function renderLoop() {
+                requestAnimationFrame(renderLoop);
+                const delta = clock.getElapsedTime();
+
+                executeRaycastDetection();
+                controls.update();
+
+                // Gentle mechanical vehicle stabilization shift simulations
+                rocketGroup.position.y = Math.sin(delta * 0.7) * 0.15;
+                rocketGroup.rotation.y = delta * 0.12;
+
+                starField.rotation.y = delta * -0.005;
+
+                renderer.render(scene, camera);
+            }
+
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+
+            renderLoop();
+
+        } catch (webglRenderError) {
+            // WebGL initialization failed: deploy fallback blueprint interface
+            console.warn("WebGL runtime unavailable. Loading blueprint interface.");
+            document.body.classList.add('fallback-active');
+            if (hintText) hintText.textContent = "DIAGNOSTIC DISPLAY OVERRIDE // CLICK CHIPS TO EXPLORE STRUCTURAL COMPONENTS";
+        }
+    </script>
+</body>
+
+</html>
