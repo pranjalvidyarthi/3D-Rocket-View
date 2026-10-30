@@ -55,7 +55,7 @@ Open `index.html` in your browser.
 Alternatively, use the **Live Server** extension in Visual Studio Code for a better development experience.
 
 ## 📸 Preview
-![3D Rocket View Preview](preview.png)
+![3D Rocket View Preview](preview.PNG)
 
 ## 🎯 Project Objective
 
